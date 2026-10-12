@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>3D 个人名片</title>
+    <style>
+        * { margin: 0; padding: 0; }
+        body {
+            overflow: hidden;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            height: 100vh;
+        }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <!-- 引入 Three.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+
+    <script>
+        // ========== 1. 初始化场景三大件：场景、相机、渲染器 ==========
+        const scene = new THREE.Scene();
+        // 透视相机：视角、宽高比、近裁剪面、远裁剪面
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 8; // 相机与卡片的距离
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio); // 适配高清屏，避免文字模糊
+        document.body.appendChild(renderer.domElement);
+
+        // ========== 2. 添加灯光，制造立体感 ==========
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // 环境光：整体提亮
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // 平行光：产生明暗光影
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        // ========== 3. 用 Canvas 生成自定义文字贴图 ==========
+        // 好处：排版自由、无需加载字体文件，直接贴到3D卡片上
+        function createCardTexture(name, title, contact) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 768; // 保持名片 宽:高 = 2:3 的比例
+            const ctx = canvas.getContext('2d');
+
+            // 卡片背景 + 圆角
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.roundRect(0, 0, 512, 768, 30);
+            ctx.fill();
+
+            // 名字
+            ctx.fillStyle = '#1a1a1a';
+            ctx.font = 'bold 56px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(name, 256, 280);
+
+            // 职位/头衔
+            ctx.fillStyle = '#666666';
+            ctx.font = '28px sans-serif';
+            ctx.fillText(title, 256, 350);
+
+            // 分割线
+            ctx.strokeStyle = '#eeeeee';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(100, 420);
+            ctx.lineTo(412, 420);
+            ctx.stroke();
+
+            // 联系方式
+            ctx.fillStyle = '#333333';
+            ctx.font = '24px sans-serif';
+            ctx.fillText(contact, 256, 500);
+
+            // 生成 Three.js 可用的纹理
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // 创建正面、背面的贴图
+        const frontTexture = createCardTexture('你的名字', '前端开发工程师', '📧 your@email.com');
+        const backTexture = createCardTexture('更多信息', '个人主页 / 作品集', '💬 微信：your_wechat');
+
+        // ========== 4. 创建 3D 卡片主体 ==========
+        // 长方体几何体：宽、高、厚度
+        const geometry = new THREE.BoxGeometry(3, 4.5, 0.15);
+        // 6个面分别给材质：前后用文字贴图，四个侧面用纯色模拟卡纸侧边
+        const materials = [
+            new THREE.MeshStandardMaterial({ color: '#e0e0e0' }), // 右面
+            new THREE.MeshStandardMaterial({ color: '#e0e0e0' }), // 左面
+            new THREE.MeshStandardMaterial({ color: '#e0e0e0' }), // 上面
+            new THREE.MeshStandardMaterial({ color: '#e0e0e0' }), // 下面
+            new THREE.MeshStandardMaterial({ map: frontTexture }), // 正面
+            new THREE.MeshStandardMaterial({ map: backTexture })   // 背面
+        ];
+
+        const card = new THREE.Mesh(geometry, materials);
+        scene.add(card);
+
+        // ========== 5. 鼠标交互：视差旋转 + 悬停效果 ==========
+        let mouseX = 0;
+        let mouseY = 0;
+
+        // 鼠标移动时更新坐标，映射到 -1 ~ 1 的范围
+        document.addEventListener('mousemove', (event) => {
+            mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+            mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+        });
+
+        // 鼠标悬停时卡片轻微抬起放大
+        document.addEventListener('mouseenter', () => {
+            card.scale.set(1.05, 1.05, 1.05);
+            card.position.z = 0.3;
+        });
+        document.addEventListener('mouseleave', () => {
+            card.scale.set(1, 1, 1);
+            card.position.z = 0;
+        });
+
+        // ========== 6. 窗口自适应 ==========
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ========== 7. 动画循环 ==========
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 平滑缓动跟随鼠标旋转，数值越小越丝滑
+            card.rotation.y += (mouseX * 0.5 - card.rotation.y) * 0.05;
+            card.rotation.x += (mouseY * 0.3 - card.rotation.x) * 0.05;
+
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
